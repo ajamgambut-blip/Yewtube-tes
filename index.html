@@ -3,181 +3,577 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>YewTube API Test</title>
+
+<title>Invidious Instance Tester</title>
 
 <style>
-body{
-  background:#111;
-  color:#fff;
-  font-family:Arial,sans-serif;
-  padding:25px;
+
+*{
+  box-sizing:border-box;
 }
 
-input,button{
-  width:100%;
-  padding:15px;
-  margin-top:10px;
-  box-sizing:border-box;
-  border-radius:10px;
+body{
+  margin:0;
+  padding:22px;
+  background:#101114;
+  color:white;
+  font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+}
+
+.card{
+  max-width:600px;
+  margin:auto;
+  background:#1b1d22;
+  padding:22px;
+  border-radius:22px;
+}
+
+h1{
+  margin-top:0;
 }
 
 input{
-  background:#222;
-  color:#fff;
-  border:1px solid #555;
+  width:100%;
+  padding:15px;
+  background:#111;
+  border:1px solid #444;
+  color:white;
+  border-radius:12px;
+  font-size:15px;
 }
 
 button{
-  background:#fff;
+  width:100%;
+  margin-top:12px;
+  padding:15px;
   border:0;
+  border-radius:12px;
+  font-size:16px;
   font-weight:bold;
 }
 
-#result{
-  margin-top:20px;
+#summary{
+  margin-top:18px;
   padding:15px;
-  background:#222;
-  border-radius:10px;
+  background:#111;
+  border-radius:12px;
   white-space:pre-wrap;
+}
+
+.result{
+  margin-top:10px;
+  padding:14px;
+  background:#111;
+  border-radius:12px;
+  line-height:1.5;
   word-break:break-word;
 }
+
+.ok{
+  border-left:4px solid #42e88a;
+}
+
+.fail{
+  border-left:4px solid #ff5865;
+}
+
+.testing{
+  border-left:4px solid #ffc857;
+}
+
+.small{
+  color:#999;
+  font-size:13px;
+}
+
 </style>
 </head>
 
 <body>
 
-<h2>YewTube API Test</h2>
+<div class="card">
+
+<h1>🔎 Invidious Tester</h1>
+
+<p class="small">
+Masukkan link YouTube. Tester akan mencoba beberapa
+instance Invidious secara otomatis.
+</p>
 
 <input
-id="video"
-placeholder="Masukkan URL YouTube"
+id="youtube"
+placeholder="https://www.youtube.com/watch?v=..."
 >
 
-<button onclick="test()">
-TEST API VIDEO
+<button
+id="start"
+onclick="startTest()"
+>
+MULAI TES
 </button>
 
-<div id="result">
+<div id="summary">
 Belum dites.
 </div>
 
+<div id="results"></div>
+
+</div>
+
+
 <script>
 
-async function test(){
+/*
+===========================================
+INSTANCE YANG AKAN DITES
+===========================================
+*/
 
-  const result =
-    document.getElementById("result");
+const instances = [
 
-  const value =
-    document.getElementById("video").value.trim();
+  "https://inv.nadeko.net",
 
-  result.innerText =
-    "⏳ Memproses...";
+  "https://invidious.nerdvpn.de",
 
-  let id;
+  "https://yt.chocolatemoo53.com",
+
+  "https://invidious.tiekoetter.com",
+
+  "https://invidious.f5.si",
+
+  "https://inv.zoomerville.com",
+
+  "https://yewtu.be"
+
+];
+
+
+/*
+===========================================
+AMBIL VIDEO ID
+===========================================
+*/
+
+function getVideoId(value){
+
+  value=value.trim();
+
+  /*
+  ID langsung
+  */
+
+  if(
+    /^[A-Za-z0-9_-]{11}$/.test(value)
+  ){
+    return value;
+  }
+
 
   try{
 
-    const url =
-      new URL(value);
+    const url=new URL(value);
 
-    if(url.hostname.includes("youtu.be")){
 
-      id =
-        url.pathname
+    /*
+    youtu.be
+    */
+
+    if(
+      url.hostname.includes("youtu.be")
+    ){
+
+      return url.pathname
         .split("/")
         .filter(Boolean)[0];
 
-    }else{
+    }
 
-      id =
-        url.searchParams.get("v");
+
+    /*
+    youtube.com/watch?v=
+    */
+
+    const v=
+      url.searchParams.get("v");
+
+    if(v){
+      return v;
+    }
+
+
+    /*
+    shorts
+    */
+
+    const parts=
+      url.pathname
+      .split("/")
+      .filter(Boolean);
+
+    const shorts=
+      parts.indexOf("shorts");
+
+    if(
+      shorts>=0 &&
+      parts[shorts+1]
+    ){
+
+      return parts[shorts+1];
+
+    }
+
+
+    /*
+    embed
+    */
+
+    const embed=
+      parts.indexOf("embed");
+
+    if(
+      embed>=0 &&
+      parts[embed+1]
+    ){
+
+      return parts[embed+1];
 
     }
 
   }catch(e){
 
-    result.innerText =
-      "❌ URL tidak valid";
-
-    return;
-
   }
 
-  if(!id){
+  return null;
+}
 
-    result.innerText =
-      "❌ Video ID tidak ditemukan";
 
-    return;
+/*
+===========================================
+TES SATU INSTANCE
+===========================================
+*/
 
-  }
+async function testInstance(
+  base,
+  videoId,
+  element
+){
 
-  result.innerText =
-    "ID ditemukan:\n"+
-    id+
-    "\n\n"+
-    "⏳ Request ke YewTube...";
+  const endpoint=
+    base +
+    "/api/v1/videos/" +
+    encodeURIComponent(videoId) +
+    "?hl=en";
+
+
+  element.className=
+    "result testing";
+
+
+  element.innerHTML=
+    "⏳ Testing...<br>" +
+    "<span class='small'>" +
+    endpoint +
+    "</span>";
+
+
+  const controller=
+    new AbortController();
+
+
+  const timeout=
+    setTimeout(
+      ()=>controller.abort(),
+      12000
+    );
 
 
   try{
 
-    const url =
-      "https://yewtu.be/api/v1/videos/" +
-      id;
+    const response=
+      await fetch(
+        endpoint,
+        {
+          method:"GET",
+          headers:{
+            "Accept":
+              "application/json"
+          },
+          cache:"no-store",
+          signal:controller.signal
+        }
+      );
 
-    console.log("Request:",url);
 
-    const response =
-      await fetch(url);
-
-    console.log(
-      "Status:",
-      response.status
-    );
-
-
-    const text =
-      await response.text();
-
-    console.log(text);
+    clearTimeout(timeout);
 
 
     if(!response.ok){
 
-      result.innerText =
-        "❌ HTTP ERROR\n\n"+
-        response.status+
-        "\n\n"+
-        text.substring(0,1000);
-
-      return;
+      throw new Error(
+        "HTTP " +
+        response.status
+      );
 
     }
 
 
-    result.innerText =
-      "🟢 REQUEST BERHASIL!\n\n"+
-      "HTTP: "+
-      response.status+
-      "\n\n"+
-      "Response awal:\n"+
-      text.substring(0,1500);
+    const data=
+      await response.json();
+
+
+    const formats=
+      data.adaptiveFormats || [];
+
+
+    const audioFormats=
+      formats.filter(
+        f =>
+          f.url &&
+          String(
+            f.type || ""
+          ).toLowerCase()
+          .startsWith("audio/")
+      );
+
+
+    element.className=
+      "result ok";
+
+
+    element.innerHTML=
+      "🟢 <b>BERHASIL</b><br><br>" +
+
+      "HTTP: " +
+      response.status +
+
+      "<br>" +
+
+      "Judul: " +
+      escapeHtml(
+        data.title || "-"
+      ) +
+
+      "<br>" +
+
+      "Adaptive formats: " +
+      formats.length +
+
+      "<br>" +
+
+      "Audio formats: " +
+      audioFormats.length;
+
+
+    if(audioFormats.length){
+
+      const best=
+        audioFormats.sort(
+          (a,b)=>
+            Number(b.bitrate||0) -
+            Number(a.bitrate||0)
+        )[0];
+
+
+      element.innerHTML+=
+        "<br>Bitrate: " +
+        Math.round(
+          Number(best.bitrate||0)/1000
+        ) +
+        " kbps" +
+
+        "<br>Type: " +
+        escapeHtml(
+          best.type || "-"
+        ) +
+
+        "<br><br>" +
+
+        "🎵 <b>AUDIO STREAM TERSEDIA</b>";
+
+    }
+
+
+    return {
+      success:true,
+      audio:audioFormats.length
+    };
 
 
   }catch(error){
 
-    console.error(error);
+    clearTimeout(timeout);
 
-    result.innerText =
-      "❌ LOAD FAILED\n\n"+
-      error.name+
-      "\n"+
-      error.message+
-      "\n\n"+
-      "Request ke endpoint video gagal.";
+
+    element.className=
+      "result fail";
+
+
+    let message=
+      error.message;
+
+
+    if(
+      error.name === "AbortError"
+    ){
+
+      message=
+        "Timeout (>12 detik)";
+
+    }
+
+
+    element.innerHTML=
+      "🔴 <b>GAGAL</b><br><br>" +
+
+      escapeHtml(message);
+
+
+    return {
+      success:false,
+      audio:0
+    };
 
   }
+
+}
+
+
+/*
+===========================================
+ESCAPE HTML
+===========================================
+*/
+
+function escapeHtml(text){
+
+  return String(text)
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+
+}
+
+
+/*
+===========================================
+MULAI SEMUA TES
+===========================================
+*/
+
+async function startTest(){
+
+  const input=
+    document.getElementById("youtube");
+
+  const results=
+    document.getElementById("results");
+
+  const summary=
+    document.getElementById("summary");
+
+  const button=
+    document.getElementById("start");
+
+
+  const videoId=
+    getVideoId(input.value);
+
+
+  if(!videoId){
+
+    summary.innerText=
+      "❌ Link YouTube tidak valid.";
+
+    return;
+
+  }
+
+
+  button.disabled=true;
+
+  results.innerHTML="";
+
+
+  summary.innerText=
+    "⏳ Mulai testing...\n\n" +
+    "Video ID: " +
+    videoId;
+
+
+  let success=0;
+
+  let audioSuccess=0;
+
+
+  for(
+    const instance of instances
+  ){
+
+    const box=
+      document.createElement("div");
+
+    box.className=
+      "result testing";
+
+
+    box.innerHTML=
+      "<b>" +
+      escapeHtml(instance) +
+      "</b><br>" +
+      "⏳ Menunggu...";
+
+
+    results.appendChild(box);
+
+
+    const result=
+      await testInstance(
+        instance,
+        videoId,
+        box
+      );
+
+
+    if(result.success){
+
+      success++;
+
+    }
+
+
+    if(result.audio>0){
+
+      audioSuccess++;
+
+    }
+
+  }
+
+
+  summary.innerText=
+    "🏁 SELESAI\n\n" +
+
+    "Instance berhasil: " +
+    success +
+    " / " +
+    instances.length +
+
+    "\nInstance dengan audio: " +
+    audioSuccess +
+
+    "\n\n" +
+
+    (
+      audioSuccess > 0
+      ? "🎵 Ada instance yang menyediakan audio!"
+      : "❌ Belum menemukan instance audio."
+    );
+
+
+  button.disabled=false;
 
 }
 
