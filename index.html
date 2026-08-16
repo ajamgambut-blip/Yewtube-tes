@@ -1,80 +1,297 @@
 <!DOCTYPE html>
-<html>
+<html lang="id">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>YewTube Connection Test</title>
+
+<title>YewTube Video Test</title>
 
 <style>
 body{
-    background:#111;
-    color:white;
-    font-family:Arial;
-    padding:30px;
+  margin:0;
+  padding:24px;
+  background:#101114;
+  color:white;
+  font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+}
+
+.card{
+  max-width:520px;
+  margin:auto;
+  background:#1b1d22;
+  padding:22px;
+  border-radius:22px;
+}
+
+input{
+  width:100%;
+  padding:14px;
+  box-sizing:border-box;
+  border-radius:12px;
+  border:1px solid #444;
+  background:#111;
+  color:white;
+  font-size:15px;
 }
 
 button{
-    width:100%;
-    padding:18px;
-    font-size:18px;
-    margin-top:20px;
+  width:100%;
+  margin-top:12px;
+  padding:15px;
+  border:0;
+  border-radius:12px;
+  font-size:16px;
+  font-weight:bold;
 }
 
-#hasil{
-    margin-top:20px;
-    padding:15px;
-    background:#222;
-    white-space:pre-wrap;
+#status{
+  margin-top:18px;
+  padding:15px;
+  background:#111;
+  border-radius:12px;
+  white-space:pre-wrap;
+  line-height:1.5;
+}
+
+audio{
+  width:100%;
+  margin-top:18px;
 }
 </style>
 </head>
 
 <body>
 
-<h1>YewTube Connection Test</h1>
+<div class="card">
 
-<button onclick="testYewTube()">
-TES YEW TUBE
+<h2>🎵 YewTube Video Test</h2>
+
+<input
+  id="url"
+  placeholder="Masukkan link YouTube"
+/>
+
+<button onclick="testVideo()">
+TES VIDEO
 </button>
 
-<div id="hasil">
+<div id="status">
 Belum dites.
+</div>
+
+<audio
+  id="audio"
+  controls
+  playsinline>
+</audio>
+
 </div>
 
 <script>
 
-async function testYewTube(){
+function getVideoId(value){
 
-    const hasil =
-        document.getElementById("hasil");
+  value=value.trim();
 
-    hasil.innerText =
-        "⏳ Menghubungi YewTube...";
+  try{
 
-    try{
+    const url=new URL(value);
 
-        const response =
-            await fetch(
-                "https://yewtu.be/api/v1/stats"
-            );
+    if(url.hostname.includes("youtu.be")){
 
-        hasil.innerText =
-            "HTTP STATUS: " +
-            response.status +
-            "\n\n" +
-            "Koneksi ke YewTube berhasil! 🟢";
-
-    }catch(error){
-
-        hasil.innerText =
-            "❌ LOAD FAILED\n\n" +
-            error.message +
-            "\n\n" +
-            "YewTube tidak dapat diakses langsung dari browser.";
-
-        console.log(error);
+      return url.pathname
+        .split("/")
+        .filter(Boolean)[0];
 
     }
+
+    if(url.searchParams.get("v")){
+
+      return url.searchParams.get("v");
+
+    }
+
+    const parts=
+      url.pathname
+      .split("/")
+      .filter(Boolean);
+
+    const shorts=
+      parts.indexOf("shorts");
+
+    if(
+      shorts>=0 &&
+      parts[shorts+1]
+    ){
+
+      return parts[shorts+1];
+
+    }
+
+  }catch(e){}
+
+  return null;
+}
+
+
+async function testVideo(){
+
+  const status=
+    document.getElementById("status");
+
+  const audio=
+    document.getElementById("audio");
+
+  const url=
+    document.getElementById("url").value;
+
+  const id=
+    getVideoId(url);
+
+  if(!id){
+
+    status.innerText=
+      "❌ ID YouTube tidak ditemukan.";
+
+    return;
+  }
+
+  status.innerText=
+    "⏳ Mengambil data video...\n\n"+
+    "ID: "+id;
+
+
+  try{
+
+    const api=
+      "https://yewtu.be/api/v1/videos/"+
+      encodeURIComponent(id);
+
+    const response=
+      await fetch(api);
+
+    if(!response.ok){
+
+      throw new Error(
+        "HTTP "+response.status
+      );
+
+    }
+
+    const data=
+      await response.json();
+
+
+    console.log(data);
+
+
+    const formats=
+      data.adaptiveFormats || [];
+
+
+    status.innerText=
+      "🟢 VIDEO DITEMUKAN\n\n"+
+      "Judul:\n"+
+      (data.title || "-")+
+      "\n\n"+
+      "Adaptive formats: "+
+      formats.length+
+      "\n\n"+
+      "Mencari audio...";
+
+
+    /*
+     * Cari audio
+     */
+
+    let audioFormat=null;
+
+
+    for(const format of formats){
+
+      const type=
+        String(format.type || "");
+
+      if(
+        type.startsWith("audio/") &&
+        format.url
+      ){
+
+        if(
+          !audioFormat ||
+          Number(format.bitrate || 0) >
+          Number(audioFormat.bitrate || 0)
+        ){
+
+          audioFormat=format;
+
+        }
+
+      }
+
+    }
+
+
+    if(!audioFormat){
+
+      status.innerText=
+        "❌ VIDEO ADA, TAPI AUDIO STREAM TIDAK DITEMUKAN.";
+
+      return;
+    }
+
+
+    status.innerText=
+      "🟢 AUDIO STREAM DITEMUKAN!\n\n"+
+      "Type:\n"+
+      audioFormat.type+
+      "\n\n"+
+      "Bitrate:\n"+
+      Math.round(
+        Number(audioFormat.bitrate || 0)/1000
+      )+
+      " kbps"+
+      "\n\n"+
+      "Mencoba memasukkan stream ke audio player...";
+
+
+    audio.src=
+      audioFormat.url;
+
+    audio.load();
+
+
+    audio.onloadedmetadata=function(){
+
+      status.innerText=
+        "🟢 STREAM BERHASIL DIMUAT!\n\n"+
+        "Durasi: "+
+        Math.round(audio.duration)+
+        " detik\n\n"+
+        "Sekarang tekan ▶️.";
+
+    };
+
+
+    audio.onerror=function(){
+
+      status.innerText=
+        "❌ AUDIO STREAM DITEMUKAN\n"+
+        "TAPI SAFARI GAGAL MEMAINKANNYA.\n\n"+
+        "Ini penting untuk pengujian kita.";
+
+    };
+
+
+  }catch(error){
+
+    console.error(error);
+
+    status.innerText=
+      "❌ ERROR\n\n"+
+      error.message;
+
+  }
 
 }
 
