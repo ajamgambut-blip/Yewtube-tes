@@ -3,293 +3,179 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-
-<title>YewTube Video Test</title>
+<title>YewTube API Test</title>
 
 <style>
 body{
-  margin:0;
-  padding:24px;
-  background:#101114;
-  color:white;
-  font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+  background:#111;
+  color:#fff;
+  font-family:Arial,sans-serif;
+  padding:25px;
 }
 
-.card{
-  max-width:520px;
-  margin:auto;
-  background:#1b1d22;
-  padding:22px;
-  border-radius:22px;
+input,button{
+  width:100%;
+  padding:15px;
+  margin-top:10px;
+  box-sizing:border-box;
+  border-radius:10px;
 }
 
 input{
-  width:100%;
-  padding:14px;
-  box-sizing:border-box;
-  border-radius:12px;
-  border:1px solid #444;
-  background:#111;
-  color:white;
-  font-size:15px;
+  background:#222;
+  color:#fff;
+  border:1px solid #555;
 }
 
 button{
-  width:100%;
-  margin-top:12px;
-  padding:15px;
+  background:#fff;
   border:0;
-  border-radius:12px;
-  font-size:16px;
   font-weight:bold;
 }
 
-#status{
-  margin-top:18px;
+#result{
+  margin-top:20px;
   padding:15px;
-  background:#111;
-  border-radius:12px;
+  background:#222;
+  border-radius:10px;
   white-space:pre-wrap;
-  line-height:1.5;
-}
-
-audio{
-  width:100%;
-  margin-top:18px;
+  word-break:break-word;
 }
 </style>
 </head>
 
 <body>
 
-<div class="card">
-
-<h2>🎵 YewTube Video Test</h2>
+<h2>YewTube API Test</h2>
 
 <input
-  id="url"
-  placeholder="Masukkan link YouTube"
-/>
+id="video"
+placeholder="Masukkan URL YouTube"
+>
 
-<button onclick="testVideo()">
-TES VIDEO
+<button onclick="test()">
+TEST API VIDEO
 </button>
 
-<div id="status">
+<div id="result">
 Belum dites.
-</div>
-
-<audio
-  id="audio"
-  controls
-  playsinline>
-</audio>
-
 </div>
 
 <script>
 
-function getVideoId(value){
+async function test(){
 
-  value=value.trim();
+  const result =
+    document.getElementById("result");
+
+  const value =
+    document.getElementById("video").value.trim();
+
+  result.innerText =
+    "⏳ Memproses...";
+
+  let id;
 
   try{
 
-    const url=new URL(value);
+    const url =
+      new URL(value);
 
     if(url.hostname.includes("youtu.be")){
 
-      return url.pathname
+      id =
+        url.pathname
         .split("/")
         .filter(Boolean)[0];
 
-    }
+    }else{
 
-    if(url.searchParams.get("v")){
-
-      return url.searchParams.get("v");
-
-    }
-
-    const parts=
-      url.pathname
-      .split("/")
-      .filter(Boolean);
-
-    const shorts=
-      parts.indexOf("shorts");
-
-    if(
-      shorts>=0 &&
-      parts[shorts+1]
-    ){
-
-      return parts[shorts+1];
+      id =
+        url.searchParams.get("v");
 
     }
 
-  }catch(e){}
+  }catch(e){
 
-  return null;
-}
+    result.innerText =
+      "❌ URL tidak valid";
 
+    return;
 
-async function testVideo(){
-
-  const status=
-    document.getElementById("status");
-
-  const audio=
-    document.getElementById("audio");
-
-  const url=
-    document.getElementById("url").value;
-
-  const id=
-    getVideoId(url);
+  }
 
   if(!id){
 
-    status.innerText=
-      "❌ ID YouTube tidak ditemukan.";
+    result.innerText =
+      "❌ Video ID tidak ditemukan";
 
     return;
+
   }
 
-  status.innerText=
-    "⏳ Mengambil data video...\n\n"+
-    "ID: "+id;
+  result.innerText =
+    "ID ditemukan:\n"+
+    id+
+    "\n\n"+
+    "⏳ Request ke YewTube...";
 
 
   try{
 
-    const api=
-      "https://yewtu.be/api/v1/videos/"+
-      encodeURIComponent(id);
+    const url =
+      "https://yewtu.be/api/v1/videos/" +
+      id;
 
-    const response=
-      await fetch(api);
+    console.log("Request:",url);
+
+    const response =
+      await fetch(url);
+
+    console.log(
+      "Status:",
+      response.status
+    );
+
+
+    const text =
+      await response.text();
+
+    console.log(text);
+
 
     if(!response.ok){
 
-      throw new Error(
-        "HTTP "+response.status
-      );
-
-    }
-
-    const data=
-      await response.json();
-
-
-    console.log(data);
-
-
-    const formats=
-      data.adaptiveFormats || [];
-
-
-    status.innerText=
-      "🟢 VIDEO DITEMUKAN\n\n"+
-      "Judul:\n"+
-      (data.title || "-")+
-      "\n\n"+
-      "Adaptive formats: "+
-      formats.length+
-      "\n\n"+
-      "Mencari audio...";
-
-
-    /*
-     * Cari audio
-     */
-
-    let audioFormat=null;
-
-
-    for(const format of formats){
-
-      const type=
-        String(format.type || "");
-
-      if(
-        type.startsWith("audio/") &&
-        format.url
-      ){
-
-        if(
-          !audioFormat ||
-          Number(format.bitrate || 0) >
-          Number(audioFormat.bitrate || 0)
-        ){
-
-          audioFormat=format;
-
-        }
-
-      }
-
-    }
-
-
-    if(!audioFormat){
-
-      status.innerText=
-        "❌ VIDEO ADA, TAPI AUDIO STREAM TIDAK DITEMUKAN.";
+      result.innerText =
+        "❌ HTTP ERROR\n\n"+
+        response.status+
+        "\n\n"+
+        text.substring(0,1000);
 
       return;
+
     }
 
 
-    status.innerText=
-      "🟢 AUDIO STREAM DITEMUKAN!\n\n"+
-      "Type:\n"+
-      audioFormat.type+
+    result.innerText =
+      "🟢 REQUEST BERHASIL!\n\n"+
+      "HTTP: "+
+      response.status+
       "\n\n"+
-      "Bitrate:\n"+
-      Math.round(
-        Number(audioFormat.bitrate || 0)/1000
-      )+
-      " kbps"+
-      "\n\n"+
-      "Mencoba memasukkan stream ke audio player...";
-
-
-    audio.src=
-      audioFormat.url;
-
-    audio.load();
-
-
-    audio.onloadedmetadata=function(){
-
-      status.innerText=
-        "🟢 STREAM BERHASIL DIMUAT!\n\n"+
-        "Durasi: "+
-        Math.round(audio.duration)+
-        " detik\n\n"+
-        "Sekarang tekan ▶️.";
-
-    };
-
-
-    audio.onerror=function(){
-
-      status.innerText=
-        "❌ AUDIO STREAM DITEMUKAN\n"+
-        "TAPI SAFARI GAGAL MEMAINKANNYA.\n\n"+
-        "Ini penting untuk pengujian kita.";
-
-    };
+      "Response awal:\n"+
+      text.substring(0,1500);
 
 
   }catch(error){
 
     console.error(error);
 
-    status.innerText=
-      "❌ ERROR\n\n"+
-      error.message;
+    result.innerText =
+      "❌ LOAD FAILED\n\n"+
+      error.name+
+      "\n"+
+      error.message+
+      "\n\n"+
+      "Request ke endpoint video gagal.";
 
   }
 
