@@ -2,9 +2,13 @@
 <html lang="id">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
 
-<title>Invidious Instance Tester</title>
+<meta
+  name="viewport"
+  content="width=device-width,initial-scale=1,viewport-fit=cover"
+>
+
+<title>YouTube PWA Test</title>
 
 <style>
 
@@ -14,7 +18,7 @@
 
 body{
   margin:0;
-  padding:22px;
+  padding:20px;
   background:#101114;
   color:white;
   font-family:-apple-system,BlinkMacSystemFont,sans-serif;
@@ -24,8 +28,8 @@ body{
   max-width:600px;
   margin:auto;
   background:#1b1d22;
-  padding:22px;
-  border-radius:22px;
+  padding:20px;
+  border-radius:24px;
 }
 
 h1{
@@ -44,46 +48,36 @@ input{
 
 button{
   width:100%;
-  margin-top:12px;
   padding:15px;
+  margin-top:10px;
   border:0;
   border-radius:12px;
   font-size:16px;
   font-weight:bold;
 }
 
-#summary{
-  margin-top:18px;
-  padding:15px;
+#player{
+  width:100%;
+  aspect-ratio:16/9;
+  margin-top:20px;
+  border-radius:15px;
+  overflow:hidden;
+}
+
+#status{
+  margin-top:15px;
+  padding:14px;
   background:#111;
   border-radius:12px;
   white-space:pre-wrap;
 }
 
-.result{
-  margin-top:10px;
-  padding:14px;
-  background:#111;
-  border-radius:12px;
-  line-height:1.5;
-  word-break:break-word;
+.green{
+  color:#6ee7a0;
 }
 
-.ok{
-  border-left:4px solid #42e88a;
-}
-
-.fail{
-  border-left:4px solid #ff5865;
-}
-
-.testing{
-  border-left:4px solid #ffc857;
-}
-
-.small{
-  color:#999;
-  font-size:13px;
+.red{
+  color:#ff6975;
 }
 
 </style>
@@ -93,30 +87,26 @@ button{
 
 <div class="card">
 
-<h1>🔎 Invidious Tester</h1>
+<h1>▶️ YouTube PWA Test</h1>
 
-<p class="small">
-Masukkan link YouTube. Tester akan mencoba beberapa
-instance Invidious secara otomatis.
+<p>
+Masukkan link YouTube lalu tekan PLAY.
 </p>
 
 <input
-id="youtube"
-placeholder="https://www.youtube.com/watch?v=..."
+  id="url"
+  placeholder="https://www.youtube.com/watch?v=..."
 >
 
-<button
-id="start"
-onclick="startTest()"
->
-MULAI TES
+<button onclick="loadVideo()">
+LOAD YOUTUBE
 </button>
 
-<div id="summary">
-Belum dites.
-</div>
+<div id="player"></div>
 
-<div id="results"></div>
+<div id="status">
+Status: Menunggu...
+</div>
 
 </div>
 
@@ -124,34 +114,61 @@ Belum dites.
 <script>
 
 /*
-===========================================
-INSTANCE YANG AKAN DITES
-===========================================
+=====================================
+YOUTUBE IFRAME API
+=====================================
 */
 
-const instances = [
+let player=null;
 
-  "https://inv.nadeko.net",
+let apiReady=false;
 
-  "https://invidious.nerdvpn.de",
-
-  "https://yt.chocolatemoo53.com",
-
-  "https://invidious.tiekoetter.com",
-
-  "https://invidious.f5.si",
-
-  "https://inv.zoomerville.com",
-
-  "https://yewtu.be"
-
-];
+let pendingVideo=null;
 
 
 /*
-===========================================
+Load API
+*/
+
+const tag=
+document.createElement("script");
+
+tag.src=
+"https://www.youtube.com/iframe_api";
+
+document.head.appendChild(tag);
+
+
+/*
+YouTube memanggil fungsi ini
+*/
+
+function onYouTubeIframeAPIReady(){
+
+  apiReady=true;
+
+  document.getElementById("status")
+    .innerText=
+      "🟢 YouTube Player API siap.\n\n"+
+      "Masukkan link YouTube.";
+
+  if(pendingVideo){
+
+    createPlayer(
+      pendingVideo
+    );
+
+    pendingVideo=null;
+
+  }
+
+}
+
+
+/*
+=====================================
 AMBIL VIDEO ID
-===========================================
+=====================================
 */
 
 function getVideoId(value){
@@ -165,13 +182,30 @@ function getVideoId(value){
   if(
     /^[A-Za-z0-9_-]{11}$/.test(value)
   ){
+
     return value;
+
   }
 
 
   try{
 
-    const url=new URL(value);
+    const url=
+      new URL(value);
+
+
+    /*
+    youtube.com/watch?v=
+    */
+
+    const v=
+      url.searchParams.get("v");
+
+    if(v){
+
+      return v;
+
+    }
 
 
     /*
@@ -190,25 +224,13 @@ function getVideoId(value){
 
 
     /*
-    youtube.com/watch?v=
-    */
-
-    const v=
-      url.searchParams.get("v");
-
-    if(v){
-      return v;
-    }
-
-
-    /*
     shorts
     */
 
     const parts=
       url.pathname
-      .split("/")
-      .filter(Boolean);
+        .split("/")
+        .filter(Boolean);
 
     const shorts=
       parts.indexOf("shorts");
@@ -222,269 +244,36 @@ function getVideoId(value){
 
     }
 
-
-    /*
-    embed
-    */
-
-    const embed=
-      parts.indexOf("embed");
-
-    if(
-      embed>=0 &&
-      parts[embed+1]
-    ){
-
-      return parts[embed+1];
-
-    }
-
   }catch(e){
 
   }
 
   return null;
-}
-
-
-/*
-===========================================
-TES SATU INSTANCE
-===========================================
-*/
-
-async function testInstance(
-  base,
-  videoId,
-  element
-){
-
-  const endpoint=
-    base +
-    "/api/v1/videos/" +
-    encodeURIComponent(videoId) +
-    "?hl=en";
-
-
-  element.className=
-    "result testing";
-
-
-  element.innerHTML=
-    "⏳ Testing...<br>" +
-    "<span class='small'>" +
-    endpoint +
-    "</span>";
-
-
-  const controller=
-    new AbortController();
-
-
-  const timeout=
-    setTimeout(
-      ()=>controller.abort(),
-      12000
-    );
-
-
-  try{
-
-    const response=
-      await fetch(
-        endpoint,
-        {
-          method:"GET",
-          headers:{
-            "Accept":
-              "application/json"
-          },
-          cache:"no-store",
-          signal:controller.signal
-        }
-      );
-
-
-    clearTimeout(timeout);
-
-
-    if(!response.ok){
-
-      throw new Error(
-        "HTTP " +
-        response.status
-      );
-
-    }
-
-
-    const data=
-      await response.json();
-
-
-    const formats=
-      data.adaptiveFormats || [];
-
-
-    const audioFormats=
-      formats.filter(
-        f =>
-          f.url &&
-          String(
-            f.type || ""
-          ).toLowerCase()
-          .startsWith("audio/")
-      );
-
-
-    element.className=
-      "result ok";
-
-
-    element.innerHTML=
-      "🟢 <b>BERHASIL</b><br><br>" +
-
-      "HTTP: " +
-      response.status +
-
-      "<br>" +
-
-      "Judul: " +
-      escapeHtml(
-        data.title || "-"
-      ) +
-
-      "<br>" +
-
-      "Adaptive formats: " +
-      formats.length +
-
-      "<br>" +
-
-      "Audio formats: " +
-      audioFormats.length;
-
-
-    if(audioFormats.length){
-
-      const best=
-        audioFormats.sort(
-          (a,b)=>
-            Number(b.bitrate||0) -
-            Number(a.bitrate||0)
-        )[0];
-
-
-      element.innerHTML+=
-        "<br>Bitrate: " +
-        Math.round(
-          Number(best.bitrate||0)/1000
-        ) +
-        " kbps" +
-
-        "<br>Type: " +
-        escapeHtml(
-          best.type || "-"
-        ) +
-
-        "<br><br>" +
-
-        "🎵 <b>AUDIO STREAM TERSEDIA</b>";
-
-    }
-
-
-    return {
-      success:true,
-      audio:audioFormats.length
-    };
-
-
-  }catch(error){
-
-    clearTimeout(timeout);
-
-
-    element.className=
-      "result fail";
-
-
-    let message=
-      error.message;
-
-
-    if(
-      error.name === "AbortError"
-    ){
-
-      message=
-        "Timeout (>12 detik)";
-
-    }
-
-
-    element.innerHTML=
-      "🔴 <b>GAGAL</b><br><br>" +
-
-      escapeHtml(message);
-
-
-    return {
-      success:false,
-      audio:0
-    };
-
-  }
 
 }
 
 
 /*
-===========================================
-ESCAPE HTML
-===========================================
+=====================================
+LOAD VIDEO
+=====================================
 */
 
-function escapeHtml(text){
-
-  return String(text)
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;")
-    .replaceAll("'","&#039;");
-
-}
-
-
-/*
-===========================================
-MULAI SEMUA TES
-===========================================
-*/
-
-async function startTest(){
+function loadVideo(){
 
   const input=
-    document.getElementById("youtube");
+    document.getElementById("url");
 
-  const results=
-    document.getElementById("results");
+  const status=
+    document.getElementById("status");
 
-  const summary=
-    document.getElementById("summary");
-
-  const button=
-    document.getElementById("start");
-
-
-  const videoId=
+  const id=
     getVideoId(input.value);
 
 
-  if(!videoId){
+  if(!id){
 
-    summary.innerText=
+    status.innerText=
       "❌ Link YouTube tidak valid.";
 
     return;
@@ -492,88 +281,262 @@ async function startTest(){
   }
 
 
-  button.disabled=true;
-
-  results.innerHTML="";
-
-
-  summary.innerText=
-    "⏳ Mulai testing...\n\n" +
-    "Video ID: " +
-    videoId;
+  status.innerText=
+    "⏳ Video ID ditemukan:\n"+
+    id+
+    "\n\nMenyiapkan YouTube Player...";
 
 
-  let success=0;
+  if(!apiReady){
 
-  let audioSuccess=0;
+    pendingVideo=id;
 
+    status.innerText+=
+      "\n\nMenunggu YouTube API...";
 
-  for(
-    const instance of instances
-  ){
-
-    const box=
-      document.createElement("div");
-
-    box.className=
-      "result testing";
-
-
-    box.innerHTML=
-      "<b>" +
-      escapeHtml(instance) +
-      "</b><br>" +
-      "⏳ Menunggu...";
-
-
-    results.appendChild(box);
-
-
-    const result=
-      await testInstance(
-        instance,
-        videoId,
-        box
-      );
-
-
-    if(result.success){
-
-      success++;
-
-    }
-
-
-    if(result.audio>0){
-
-      audioSuccess++;
-
-    }
+    return;
 
   }
 
 
-  summary.innerText=
-    "🏁 SELESAI\n\n" +
+  createPlayer(id);
 
-    "Instance berhasil: " +
-    success +
-    " / " +
-    instances.length +
+}
 
-    "\nInstance dengan audio: " +
-    audioSuccess +
 
-    "\n\n" +
+/*
+=====================================
+CREATE PLAYER
+=====================================
+*/
 
-    (
-      audioSuccess > 0
-      ? "🎵 Ada instance yang menyediakan audio!"
-      : "❌ Belum menemukan instance audio."
+function createPlayer(id){
+
+  if(player){
+
+    player.destroy();
+
+  }
+
+
+  document.getElementById("player")
+    .innerHTML="";
+
+
+  player=
+    new YT.Player(
+      "player",
+      {
+
+        width:"100%",
+
+        height:"100%",
+
+        videoId:id,
+
+        playerVars:{
+
+          /*
+          Tetap inline di iPhone
+          */
+
+          playsinline:1,
+
+          /*
+          Kontrol YouTube tetap ada
+          */
+
+          controls:1,
+
+          /*
+          Jangan autoplay dulu.
+          User harus menekan play.
+          */
+
+          autoplay:0,
+
+          /*
+          Related videos tetap dari channel
+          */
+
+          rel:0
+
+        },
+
+        events:{
+
+          onReady:
+            onPlayerReady,
+
+          onStateChange:
+            onPlayerStateChange,
+
+          onError:
+            onPlayerError
+
+        }
+
+      }
     );
 
+}
 
-  button.disabled=false;
+
+/*
+=====================================
+PLAYER READY
+=====================================
+*/
+
+function onPlayerReady(event){
+
+  document.getElementById("status")
+    .innerText=
+      "🟢 YOUTUBE PLAYER SIAP.\n\n"+
+      "Tekan ▶️ pada video.";
+
+}
+
+
+/*
+=====================================
+STATE
+=====================================
+*/
+
+function onPlayerStateChange(event){
+
+  const status=
+    document.getElementById("status");
+
+
+  if(
+    event.data ===
+    YT.PlayerState.PLAYING
+  ){
+
+    status.innerText=
+      "🟢 SEDANG PLAYING\n\n"+
+      "Sekarang coba:\n"+
+      "1. Kunci layar iPhone\n"+
+      "2. Tunggu 5–10 detik\n"+
+      "3. Lihat apakah audio tetap berjalan.";
+
+
+    setupMediaSession();
+
+  }
+
+
+  else if(
+    event.data ===
+    YT.PlayerState.PAUSED
+  ){
+
+    status.innerText=
+      "⏸️ PAUSED";
+
+  }
+
+
+  else if(
+    event.data ===
+    YT.PlayerState.ENDED
+  ){
+
+    status.innerText=
+      "⏹️ VIDEO SELESAI";
+
+  }
+
+}
+
+
+/*
+=====================================
+ERROR
+=====================================
+*/
+
+function onPlayerError(event){
+
+  document.getElementById("status")
+    .innerText=
+      "❌ YOUTUBE PLAYER ERROR\n\n"+
+      "Error code: "+
+      event.data;
+
+}
+
+
+/*
+=====================================
+MEDIA SESSION
+=====================================
+*/
+
+function setupMediaSession(){
+
+  if(
+    !("mediaSession" in navigator)
+  ){
+
+    return;
+
+  }
+
+
+  navigator.mediaSession.metadata=
+    new MediaMetadata({
+
+      title:
+        "YouTube Online",
+
+      artist:
+        "YouTube PWA"
+
+    });
+
+
+  try{
+
+    navigator.mediaSession
+      .setActionHandler(
+        "play",
+        function(){
+
+          if(player){
+
+            player.playVideo();
+
+          }
+
+        }
+      );
+
+
+    navigator.mediaSession
+      .setActionHandler(
+        "pause",
+        function(){
+
+          if(player){
+
+            player.pauseVideo();
+
+          }
+
+        }
+      );
+
+  }catch(e){
+
+    console.log(
+      "Media Session:",
+      e
+    );
+
+  }
 
 }
 
